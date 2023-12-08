@@ -18,13 +18,15 @@ class SkipGramModel(params:SampleParams, tokenizer: Tokenizer) extends CBOWModel
 
     if (!(new File(fname).exists())) {
       println("SkipGram filename: " + fname)
+
+
       vectorModel = new Word2Vec.Builder()
         .workers(48)
         .minWordFrequency(params.freqCutoff)
         .layerSize(params.embeddingLength)
-        .windowSize(15)
-        .epochs(10)
-        .batchSize(16)
+        .windowSize(params.embeddingWindowSize)
+        .epochs(params.epocs)
+        .batchSize(params.batchSize)
         .seed(42)
         .iterate(iter)
         .iterations(1)
@@ -32,7 +34,6 @@ class SkipGramModel(params:SampleParams, tokenizer: Tokenizer) extends CBOWModel
         .elementsLearningAlgorithm("org.deeplearning4j.models.embeddings.learning.impl.elements.SkipGram")
         .allowParallelTokenization(true)
         .build()
-
 
       vectorModel.fit()
       WordVectorSerializer.writeWord2Vec(vectorModel, new FileOutputStream(fname))

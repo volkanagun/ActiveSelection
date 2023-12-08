@@ -1,26 +1,24 @@
 package experiments
 
-import evaluation.{ExtrinsicLSTM, ExtrinsicNER, ExtrinsicPOS, ExtrinsicSentiment, IntrinsicEvaluation}
+import evaluation._
 import models.EmbeddingModel
+import org.nd4j.linalg.api.buffer.DataType
 import org.nd4j.linalg.factory.Nd4j
 import sampling.experiments.SampleParams
 import utils.{Params, Tokenizer}
 
 import java.io.File
-import java.util.concurrent.ForkJoinPool
-import scala.collection.parallel.CollectionConverters.ArrayIsParallelizable
-import scala.collection.parallel.ForkJoinTaskSupport
 import scala.util.control.Breaks
 
 class SamplingExperiment {
 
-  val samplingNames = Array("VocabSelect", "VotedDivergence", "KMeans", "KL", "VE", "LM", "Mahalonabis", "Euclidean", "Entropy", "Least", "Boltzmann")
+  val samplingNames = Array("VocabSelect", "VotedDivergence", "KMeans", "KL", "VE", "LM", "Mahalonabis", "Euclidean", "Entropy", "Least", "Boltzmann", "Hopfield")
   val adapterNames = Array("avg")
 
-  val selectionSizes = Array(1000, 5000, 25000).reverse
+  val selectionSizes = Array(1000, 5000, 25000)
   val tasks = Array("ner", "pos", "sentiment", "intrinsic")
-  val models = Array("cbow", "lstm","skip")
-  val jsonFilename = "resources/evaluations/sentence-tr.json"
+  val models = Array("cbow", "skip", "bert")
+  val jsonFilename = "resources/evaluation/analogy/sentence-tr.json"
 
   val tokenizer = new Tokenizer(windowSize = 2).loadZip()
   val embedParams = new SampleParams()
@@ -63,7 +61,7 @@ class SamplingExperiment {
     else false
   }
 
-  def evaluateExtrinsic(embedParams: SampleParams, model: String, function: ExtrinsicLSTM): Boolean = {
+  def evaluateExtrinsic(embedParams: SampleParams, model: String, function: ExtrinsicELMO): Boolean = {
 
 
     val sentenceFilename = embedParams.sampledDataset()
@@ -99,7 +97,6 @@ class SamplingExperiment {
 
 
   def evaluateIntrinsic(embedParams: SampleParams, model: String): Boolean = {
-
 
     val sentenceFilename = embedParams.sampledDataset()
     //embedParams.intrinsicTextFolder + embedParams.scorerName + "-" + embedParams.maxSelectSize + "-" + key + ".txt"
@@ -148,12 +145,27 @@ class SamplingExperiment {
 
 object SamplingExperiment {
 
+
+  init()
+
   def main(args:Array[String]): Unit = {
-    val range = Range(0, 300).toArray//.par
+    //System.setProperty("org.bytedeco.openblas.load", "mkl")
+
+
+    val range = Range(0, 3000).toArray//.par
     //range.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
     range.foreach(_ =>
       evaluate(new SamplingExperiment, args)
     )
+  }
+
+  def epocs(embeddingModel:String):Int = {
+    if(embeddingModel.contains("lstm")) 3
+    else 3
+  }
+
+  def init(): Unit = {
+    Nd4j.setDefaultDataTypes(DataType.BFLOAT16, DataType.BFLOAT16)
   }
 
   def evaluate(experiments: SamplingExperiment, args: Array[String]): Unit = {
@@ -171,10 +183,11 @@ object SamplingExperiment {
                 crrParams.maxSelectSize = selectSize
                 crrParams.adapterName = adapterName
                 crrParams.embeddingModel = crrModel
-                crrParams.epocs = 5
-                crrParams.batchSize = 16
-                crrParams.evalBatchSize = 64
+                crrParams.epocs = 3
+                crrParams.batchSize = 96
+                crrParams.evalBatchSize = 96
                 crrParams.evalEpocs = 3
+
 
                 if (experiments.evaluate(crrParams, crrModel, taskName)) {
                   breaks.break()
@@ -186,6 +199,4 @@ object SamplingExperiment {
       })
     }
   }
-
-
 }

@@ -20,6 +20,8 @@ class DatasetConversion {
     val filename = "resources/dictionary/sentiment.txt"
     val pw = new PrintWriter(filename)
     Source.fromFile(sentimentFilename).getLines()
+      .filter(l=> l.contains("\t"))
+      .take(10000)
       .map(line => {
         line.split("\\t").head
       }).flatMap(sentence => tokenizer.standardTokenizer(sentence)
@@ -155,15 +157,15 @@ class DatasetConversion {
 
 object DatasetConversion extends DatasetConversion() {
   def main(args: Array[String]): Unit = {
-    convertNER("resources/evaluation/ner/train.json","train")
+    /*convertNER("resources/evaluation/ner/train.json","train")
     convertNER("resources/evaluation/ner/test.json","test")
     convertPOS("resources/evaluation/pos/boun-train.conllu","train")
     convertPOS("resources/evaluation/pos/boun-test.conllu","test")
     convertSentiment("resources/evaluation/sentiment/train.csv", "train")
     convertSentiment("resources/evaluation/sentiment/test.csv", "test")
-
-    createNERVocabulary()
+*/
+    //createNERVocabulary()
     createSentimentVocabulary()
-    createPOSVocabulary()
+    //createPOSVocabulary()
   }
 }

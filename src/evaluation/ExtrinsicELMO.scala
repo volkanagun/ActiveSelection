@@ -1,13 +1,12 @@
 package evaluation
 
 import models.{EmbeddingModel, SelfAttentionLSTM}
-import org.deeplearning4j.nn.conf.{NeuralNetConfiguration, RNNFormat}
+import org.deeplearning4j.nn.conf.NeuralNetConfiguration
 import org.deeplearning4j.nn.conf.graph.MergeVertex
 import org.deeplearning4j.nn.conf.inputs.InputType
 import org.deeplearning4j.nn.conf.layers.ConvolutionLayer.AlgoMode
 import org.deeplearning4j.nn.conf.layers.recurrent.LastTimeStep
-import org.deeplearning4j.nn.conf.layers.{EmbeddingSequenceLayer, LSTM, OutputLayer, RnnOutputLayer}
-import org.deeplearning4j.nn.graph
+import org.deeplearning4j.nn.conf.layers.{EmbeddingSequenceLayer, LSTM, OutputLayer}
 import org.deeplearning4j.nn.graph.ComputationGraph
 import org.nd4j.evaluation.classification.Evaluation
 import org.nd4j.linalg.activations.Activation
@@ -20,11 +19,11 @@ import org.nd4j.linalg.indexing.NDArrayIndex
 import org.nd4j.linalg.learning.config.Adam
 import org.nd4j.linalg.lossfunctions.LossFunctions
 import sampling.experiments.SampleParams
-import utils.{Params, Tokenizer}
+import utils.Tokenizer
 
 import scala.io.Source
 
-abstract class ExtrinsicLSTM(params: SampleParams, tokenizer: Tokenizer) extends SelfAttentionLSTM(params, tokenizer)  {
+abstract class ExtrinsicELMO(params: SampleParams, tokenizer: Tokenizer, forceTrain:Boolean = false) extends SelfAttentionLSTM(params, tokenizer, forceTrain)  {
   //use ELMO
   var inputDictionary = Map[String, Int]("dummy" -> 0)
 
@@ -98,22 +97,23 @@ abstract class ExtrinsicLSTM(params: SampleParams, tokenizer: Tokenizer) extends
         var inputRightStack = Array[INDArray]()
         var outputStack = Array[INDArray]()
         var i=0;
-        while(i < params.batchSize && samples.hasNext) {
+        while(i < params.evalBatchSize && samples.hasNext) {
           val (input, output) = samples.next()
-          val inputLeft = tokenize(input)
-            .take(params.modelWindowLength)
+          val tokens = tokenize(input)
 
-          val inputLeftArray = inputLeft.map(ngram => {
-            update(ngram)
+          tokens.sliding(params.embeddingWindowLength, 1).foreach(inputLeft=>{
+            val inputLeftArray = inputLeft.map(ngram => {
+              update(ngram)
+            })
+            val inputLeftOneIndex = index(inputLeftArray)
+            val inputRightOneIndex = index(inputLeftArray.reverse)
+            val outputArray = onehot(labels().indexOf(output), labels.length)
+
+            inputLeftStack :+= inputLeftOneIndex
+            inputRightStack :+= inputRightOneIndex
+            outputStack :+= outputArray
+            i=i + 1
           })
-          val inputLeftOneIndex = index(inputLeftArray)
-          val inputRightOneIndex = index(inputLeftArray.reverse)
-          val outputArray = onehot(labels().indexOf(output), labels.length)
-
-          inputLeftStack :+= inputLeftOneIndex
-          inputRightStack :+= inputRightOneIndex
-          outputStack :+= outputArray
-          i=i + 1
         }
 
         val vLeft = Nd4j.vstack(inputLeftStack:_*)
@@ -172,20 +172,20 @@ abstract class ExtrinsicLSTM(params: SampleParams, tokenizer: Tokenizer) extends
       .allowDisconnected(true)
       .addInputs("left", "right")
       .addVertex("stack", new org.deeplearning4j.nn.conf.graph.StackVertex(), "left", "right")
-      .addLayer("embedding", new EmbeddingSequenceLayer.Builder().inputLength(params.modelWindowLength)
+      .addLayer("embedding", new EmbeddingSequenceLayer.Builder().inputLength(params.embeddingWindowLength)
         .nIn(params.evalDictionarySize).nOut(params.embeddingLength).build(),
         "stack")
       .addVertex("leftemb", new org.deeplearning4j.nn.conf.graph.UnstackVertex(0, 2), "embedding")
       .addVertex("rightemb", new org.deeplearning4j.nn.conf.graph.UnstackVertex(0, 2), "embedding")
       //can use any label for this
-      .addLayer("leftout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.hiddenLength)
+      .addLayer("leftout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.embeddingHiddenLength)
         .activation(Activation.RELU)
         .build(), "leftemb")
-      .addLayer("rightout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.hiddenLength)
+      .addLayer("rightout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.embeddingHiddenLength)
         .activation(Activation.RELU)
         .build(), "rightemb")
       .addVertex("merge", new MergeVertex(), "leftout", "rightout")
-      .addLayer("output-lstm", new LastTimeStep(new LSTM.Builder().nIn(params.hiddenLength).nOut(params.hiddenLength)
+      .addLayer("output-lstm", new LastTimeStep(new LSTM.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength)
         .activation(Activation.RELU)
         .build()), "merge")
       .addLayer("output",

@@ -1,25 +1,15 @@
 package evaluation
 
-import org.deeplearning4j.nn.conf.NeuralNetConfiguration
-import org.deeplearning4j.nn.conf.graph.MergeVertex
-import org.deeplearning4j.nn.conf.inputs.InputType
-import org.deeplearning4j.nn.conf.layers.ConvolutionLayer.AlgoMode
-import org.deeplearning4j.nn.conf.layers.recurrent.LastTimeStep
-import org.deeplearning4j.nn.conf.layers.{DenseLayer, EmbeddingSequenceLayer, GlobalPoolingLayer, LSTM, OutputLayer, PoolingType, SelfAttentionLayer}
 import org.deeplearning4j.nn.graph.ComputationGraph
-import org.deeplearning4j.nn.weights.WeightInit
-import org.nd4j.linalg.activations.Activation
-import org.nd4j.linalg.api.buffer.DataType
-import org.nd4j.linalg.learning.config.Adam
-import org.nd4j.linalg.lossfunctions.LossFunctions
 import sampling.experiments.SampleParams
-import utils.{Params, Tokenizer}
+import utils.Tokenizer
 
 import scala.io.Source
 
-class ExtrinsicSentiment(params:SampleParams, tokenizer: Tokenizer) extends ExtrinsicLSTM(params, tokenizer){
+class ExtrinsicSentiment(params:SampleParams, tokenizer: Tokenizer) extends ExtrinsicELMO(params, tokenizer, true){
 
   var categories :Array[String] = null
+  var trainingSize = 5000
   override def getClassifier(): String = "sentiment"
 
   override def getTraining(): String = {
@@ -34,10 +24,12 @@ class ExtrinsicSentiment(params:SampleParams, tokenizer: Tokenizer) extends Extr
 
   override def loadSamples(filename: String): Iterator[(String, String)] = {
 
-    Source.fromFile(filename).getLines().map(line=> {
+    Source.fromFile(filename).getLines().filter(l=> l.contains("\t")).take(trainingSize).map(line=> {
       val mline = line.toLowerCase(locale)
-      val Array(p1, p2) = mline.split("\t")
-      (p1, p2)
+      val array = mline.split("\t")
+      val sentence = array.take(array.length - 1).mkString(" ")
+      val label = array.last
+      (sentence, label)
     })
   }
 
@@ -52,8 +44,9 @@ class ExtrinsicSentiment(params:SampleParams, tokenizer: Tokenizer) extends Extr
   }
 
   override def universe(): Set[String] = {
-    Source.fromFile(getTraining()).getLines()
-      .flatMap(sentence=> sentence.split("\\s+").reverse.tail)
+    Source.fromFile(getTraining()).getLines().filter(l=> l.contains("\t"))
+      .take(trainingSize)
+      .flatMap(sentence=> sentence.split("\t").head.split("\\s+"))
       .toSet
   }
 }

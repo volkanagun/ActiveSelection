@@ -27,7 +27,7 @@ object ExperimentSPL {
   //val samplingNames = Array("Boltzmann")
   val tokenization = Array("feature")
   val adapterNames = Array("avg")
-  val selectionSizes = Array(1000, 5000, 25000)
+  val selectionSizes = Array(1000, 5000, 25000/*, 100000*/)
   val embedParams = new SampleParams()
 
   embedParams.committee = 10
@@ -45,7 +45,7 @@ object ExperimentSPL {
   embedParams.maxSentenceSize = embedParams.max100million
   embedParams.maxWordSamples = 10000
   embedParams.batchSize = 100
-  embedParams.dictionarySize = 100000
+  embedParams.embeddingDictionarySize = 100000
   embedParams.secondDictionarySize = 5000
   embedParams.hiddenSize = 20
   embedParams.embeddingSize = 300
@@ -66,13 +66,13 @@ object ExperimentSPL {
       new KMeansScorer(embedParams.secondDictionarySize, embedParams.embeddingSize, embedParams.clusterSize, embedParams.knn)
     }
     else if ("KL".equals(sampleName)) {
-      new KLScorer(embedParams.dictionarySize, embedParams.embeddingSize, embedParams.windowSize, embedParams.committee)
+      new KLScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize, embedParams.windowSize, embedParams.committee)
     }
     else if ("VE".equals(sampleName)) {
-      new VEScorer(embedParams.dictionarySize, embedParams.embeddingSize, embedParams.windowSize, embedParams.committee)
+      new VEScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize, embedParams.windowSize, embedParams.committee)
     }
     else if ("LM".equals(sampleName)) {
-      new LanguageModelScorer(embedParams.dictionarySize, embedParams.embeddingSize)
+      new LanguageModelScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize)
     }
 
     else if ("Boltzmann".equals(sampleName)) {
@@ -85,25 +85,25 @@ object ExperimentSPL {
       new HopfieldScorer(embedParams.embeddingSize, embedParams.embeddingWindowSize)
     }
     else if ("Mahalonabis".equals(sampleName)) {
-      new MahalonabisScore(embedParams.dictionarySize, embedParams.embeddingSize)
+      new MahalonabisScore(embedParams.embeddingDictionarySize, embedParams.embeddingSize)
     }
     else if ("VotedDivergence".equals(sampleName)) {
       new VotedDivergence(embedParams.secondDictionarySize, embedParams.secondDictionarySize, embedParams.windowSize, embedParams.committee)
     }
     else if ("Entropy".equals(sampleName)) {
-      new BinaryEntropyScorer(embedParams.dictionarySize, embedParams.secondDictionarySize)
+      new BinaryEntropyScorer(embedParams.embeddingDictionarySize, embedParams.secondDictionarySize)
     }
     else if (sampleName.startsWith("Cosine")) {
-      new CosineScorer(embedParams.dictionarySize, embedParams.embeddingSize)
+      new CosineScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize)
     }
     else if (sampleName.startsWith("VocabSelect")) {
-      new VocabSelect(embedParams.dictionarySize, embedParams.secondDictionarySize)
+      new VocabSelect(embedParams.embeddingDictionarySize, embedParams.secondDictionarySize)
     }
     else if (sampleName.startsWith("Euclidean")) {
       new EuclideanScorer(embedParams.secondDictionarySize, embedParams.secondDictionarySize)
     }
     else if (sampleName.startsWith("Least")) {
-      new LeastSquares(50, embedParams.dictionarySize, embedParams.embeddingSize)
+      new LeastSquares(50, embedParams.embeddingDictionarySize, embedParams.embeddingSize)
     }
     else {
       null
@@ -112,10 +112,10 @@ object ExperimentSPL {
   }
 
   def createExtractor(name: String): Extractor = {
-    if (name.equals("word")) new WordExtractor(embedParams.dictionarySize)
-    else if (name.equals("ngram")) new NgramExtractor(embedParams.dictionarySize, embedParams.tokenLength)
-    else if (name.equals("feature")) new FeatureExtractor(embedParams.dictionarySize, embedParams.secondDictionarySize, embedParams.tokenLength, embedParams.freqcutoff)
-    else if (name.equals("hybrid")) new MultiExtractor(Array(new WordExtractor(embedParams.dictionarySize), new NgramExtractor(embedParams.dictionarySize, embedParams.tokenLength)))
+    if (name.equals("word")) new WordExtractor(embedParams.embeddingDictionarySize)
+    else if (name.equals("ngram")) new NgramExtractor(embedParams.embeddingDictionarySize, embedParams.tokenLength)
+    else if (name.equals("feature")) new FeatureExtractor(embedParams.embeddingDictionarySize, embedParams.secondDictionarySize, embedParams.tokenLength, embedParams.freqcutoff)
+    else if (name.equals("hybrid")) new MultiExtractor(Array(new WordExtractor(embedParams.embeddingDictionarySize), new NgramExtractor(embedParams.embeddingDictionarySize, embedParams.tokenLength)))
     else if (name.equals("readability")) new ReadabilityExtractor()
     else null
   }

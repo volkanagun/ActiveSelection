@@ -1,19 +1,20 @@
 package sampling.experiments
 
-import models.{CBOWModel, EmbeddingModel, SelfAttentionLSTM, SkipGramModel}
+import models.{CBOWModel, EmbeddingModel, FeedForwardBERT, SkipGramModel}
 import utils.Tokenizer
 
 import java.io.File
 
 class SampleParams {
-  var dictionarySize = 100000
+
   var secondDictionarySize = 5000
   var embeddingSize = 300
   var hiddenSize = 20
   var clusterSize = 20
   var ngramCombinationSize = 10
   var windowSize = 20
-  var embeddingWindowSize = 10
+  var embeddingWindowSize = 15
+  var embeddingRandomMask = 3
   var committee = 10
   var batchSize = 32
   var nthreads = 1
@@ -71,12 +72,13 @@ class SampleParams {
 
   //Embedding extraction parameters
   var embeddingModel = "cbow"
+  var embeddingDictionarySize = 100000
   var embeddingLength = 100
-  var hiddenLength = 100
-  var modelWindowLength: Int = 20
+  var embeddingHiddenLength = 100
+  var embeddingWindowLength: Int = 20
   var nheads: Int = 4
   var freqCutoff: Int = 0
-  var epocs = 10
+  var epocs = 3
   var lrate = 0.001
 
 
@@ -93,7 +95,7 @@ class SampleParams {
   def createModel(name: String, tokenizer: Tokenizer): EmbeddingModel = {
     if (name.startsWith("cbow")) new CBOWModel(this, tokenizer)
     else if (name.startsWith("skip")) new SkipGramModel(this, tokenizer)
-    else if (name.startsWith("lstm")) new SelfAttentionLSTM(this, tokenizer)
+    else if (name.startsWith("bert")) new FeedForwardBERT(this, tokenizer)
     else null
   }
 
@@ -121,7 +123,7 @@ class SampleParams {
   def experimentKey(): Int = {
     val array = Array[Int](
       maxSelectSize,
-      dictionarySize,
+      embeddingDictionarySize,
       secondDictionarySize,
       embeddingSize,
       hiddenSize,
@@ -149,7 +151,7 @@ class SampleParams {
     copyParams.maxSelectSize = maxSelectSize
     copyParams.embeddingSize = embeddingSize
     copyParams.hiddenSize = hiddenSize
-    copyParams.dictionarySize = dictionarySize
+    copyParams.embeddingDictionarySize = embeddingDictionarySize
     copyParams.secondDictionarySize = secondDictionarySize
     copyParams.windowSize = windowSize
     copyParams.maxSentenceSize = maxSentenceSize
@@ -174,8 +176,8 @@ class SampleParams {
 
     copyParams.embeddingModel = embeddingModel
     copyParams.embeddingLength = embeddingLength
-    copyParams.hiddenLength = hiddenLength
-    copyParams.modelWindowLength = modelWindowLength
+    copyParams.embeddingHiddenLength = embeddingHiddenLength
+    copyParams.embeddingWindowLength = embeddingWindowLength
     copyParams.nheads = nheads
     copyParams.freqcutoff = freqcutoff
     copyParams.epocs = epocs
@@ -208,7 +210,7 @@ class SampleParams {
   }
 
   def modelID(): Int = {
-    Array[Int](lrate.hashCode(), embeddingModel.hashCode, hiddenLength, nheads, embeddingLength, modelWindowLength, dictionarySize).foldRight(7) { case (a, main) => a + 7 * main }
+    Array[Int](lrate.hashCode(), embeddingModel.hashCode, embeddingHiddenLength, nheads, embeddingLength, embeddingWindowLength, embeddingDictionarySize).foldRight(7) { case (a, main) => a + 7 * main }
   }
 
   def corpusID(): Int = {
@@ -224,11 +226,11 @@ class SampleParams {
       tag("MODEL", embeddingModel) +
       tag("EPOCS", epocs.toString) +
       tag("LEARNING_RATE", lrate.toString) +
-      tag("HIDDEN_LENGTH", hiddenLength.toString) +
+      tag("HIDDEN_LENGTH", embeddingHiddenLength.toString) +
       tag("EMBEDDING_LENGTH", embeddingLength.toString) +
-      tag("WINDOW_LENGTH", modelWindowLength.toString) +
+      tag("WINDOW_LENGTH", embeddingWindowLength.toString) +
       tag("HEADS", nheads.toString) +
-      tag("DICTIONARY_SIZE", dictionarySize.toString) +
+      tag("DICTIONARY_SIZE", embeddingDictionarySize.toString) +
       tag("SELECTION_SIZE", maxSelectSize.toString) +
       "</EMBEDDING_PARAMETERS>\n" +
       "<EVAL_PARAMETERS>\n" +

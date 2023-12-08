@@ -1,12 +1,10 @@
 package evaluation
 
-import org.deeplearning4j.nn.api.layers.RecurrentLayer
-import org.deeplearning4j.nn.conf.{NeuralNetConfiguration, RNNFormat, WorkspaceMode}
 import org.deeplearning4j.nn.conf.graph.MergeVertex
 import org.deeplearning4j.nn.conf.inputs.InputType
 import org.deeplearning4j.nn.conf.layers.ConvolutionLayer.AlgoMode
-import org.deeplearning4j.nn.conf.layers.recurrent.LastTimeStep
-import org.deeplearning4j.nn.conf.layers.{EmbeddingSequenceLayer, LSTM, OutputLayer, RnnOutputLayer}
+import org.deeplearning4j.nn.conf.layers.{LSTM, RnnOutputLayer}
+import org.deeplearning4j.nn.conf.{NeuralNetConfiguration, WorkspaceMode}
 import org.deeplearning4j.nn.graph.ComputationGraph
 import org.nd4j.linalg.activations.Activation
 import org.nd4j.linalg.api.ndarray.INDArray
@@ -17,13 +15,12 @@ import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.learning.config.Adam
 import org.nd4j.linalg.lossfunctions.LossFunctions
 import sampling.experiments.SampleParams
-import utils.{Params, Tokenizer}
+import utils.Tokenizer
 
-import java.util.Locale
 import scala.io.Source
 import scala.util.Random
 
-class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends ExtrinsicLSTM(params, tokenizer) {
+class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends ExtrinsicELMO(params, tokenizer, true) {
 
   var categories: Array[String] = null
 
@@ -72,6 +69,7 @@ class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends Extrinsic
       var samples = loadSamples(filename)
       val categorySize = labels().length
 
+
       override def next(i: Int): MultiDataSet = {
         var inputLeftStack = Array[INDArray]()
         var inputRightStack = Array[INDArray]()
@@ -80,7 +78,7 @@ class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends Extrinsic
         while (i < params.evalBatchSize && samples.hasNext) {
           val (input, output) = samples.next()
           val tokens = input.split("\\s+")
-          val inputOutput = tokens.map(word => word.split("/")).take(params.modelWindowLength)
+          val inputOutput = tokens.map(word => word.split("/")).take(params.embeddingWindowLength)
 
           val inputLeft = inputOutput.map(_.head)
 
@@ -140,22 +138,14 @@ class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends Extrinsic
       .graphBuilder()
       .allowDisconnected(true)
       .addInputs("leftemb", "rightemb")
-      /*.addInputs("left", "right")
-      .addVertex("stack", new org.deeplearning4j.nn.conf.graph.StackVertex(), "left", "right")
-      .addLayer("embedding", new EmbeddingSequenceLayer.Builder().inputLength(params.modelWindowLength)
-        .nIn(params.evalDictionarySize).nOut(params.embeddingLength).build(),
-        "stack")
-      .addVertex("leftemb", new org.deeplearning4j.nn.conf.graph.UnstackVertex(0, 2), "embedding")
-      .addVertex("rightemb", new org.deeplearning4j.nn.conf.graph.UnstackVertex(0, 2), "embedding")*/
-      //can use any label for this
-      .addLayer("leftout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.hiddenLength)
+      .addLayer("leftout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.embeddingHiddenLength)
         .activation(Activation.RELU)
         .build(), "leftemb")
-      .addLayer("rightout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.hiddenLength)
+      .addLayer("rightout", new LSTM.Builder().nIn(params.embeddingLength).nOut(params.embeddingHiddenLength)
         .activation(Activation.RELU)
         .build(), "rightemb")
       .addVertex("merge", new MergeVertex(), "leftout", "rightout")
-      .addLayer("output-lstm", new LSTM.Builder().nIn(params.hiddenLength).nOut(params.hiddenLength)
+      .addLayer("output-lstm", new LSTM.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength)
         .activation(Activation.RELU)
         .build(), "merge")
       .addLayer("output",
@@ -174,7 +164,6 @@ class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends Extrinsic
     val graph = new ComputationGraph(conf)
 
     //updateWeights(graph)
-
     graph
   }
 }

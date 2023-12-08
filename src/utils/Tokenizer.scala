@@ -206,7 +206,7 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
     this
   }
 
-  def saveZip():Tokenizer={
+  def saveZip(): Tokenizer = {
     val baos = new FileOutputStream(zipFilename);
     val gzipOut = new GZIPOutputStream(baos);
     val objectOut = new ObjectOutputStream(gzipOut);
@@ -258,7 +258,7 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
     }
   }
 
-  def loadZip():Tokenizer={
+  def loadZip(): Tokenizer = {
     println("Loading ZIP")
     val baos = new FileInputStream(zipFilename);
     val gzipOut = new GZIPInputStream(baos);
@@ -377,7 +377,7 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
       .flatMap(combinations => combinations.map(token => token.split("[\\s\\#]")))
       .flatMap(sequence => sequence.sliding(ngrams))
       .foreach(combinations => {
-        Range(1, ngrams).foreach(len=>{
+        Range(1, ngrams).foreach(len => {
           combinations.sliding(len, 1).foreach(item => {
             val str = item.mkString(" ")
             frequency = frequency.updated(str, frequency.getOrElse(str, 0d) + 1d)
@@ -496,14 +496,15 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
         .filter(_.nonEmpty)
 
       val sorted = candidates.sortBy(item => {
-         val frequencySum = item.split("[\\#\\s]+").map(subngram=> {
-            frequencyBin.getOrElse(subngram, 0d)
-         }).sum
-         frequencySum
+          val subngram = item.split("[\\#\\s]+").head
+          val frequencySum = subngram.length * frequencyBin.getOrElse(subngram, 0d)
+          frequencySum
         }).reverse
         .take(top)
 
-      val flatten = sorted.flatMap(item=> {item.split("[\\#\\s]+")})
+      val flatten = sorted.flatMap(item => {
+        item.split("[\\#\\s]+")
+      })
       flatten
     })
 
@@ -533,7 +534,7 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
 
   def ngramStemFilter(token: String): Array[String] = {
     val result = ngramFilter(Array(token))
-    if(result.isEmpty) Array(token)
+    if (result.isEmpty) Array(token)
     else result
   }
 

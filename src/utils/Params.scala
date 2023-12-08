@@ -1,7 +1,5 @@
 package utils
 
-import experiments.SamplingExperiment.{adapterNames, embedParams}
-import models.{CBOWModel, EmbeddingModel, SelfAttentionLSTM, SkipGramModel}
 
 class Params {
 

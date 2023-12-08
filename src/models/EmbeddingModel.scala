@@ -3,17 +3,18 @@ package models
 import evaluation.IntrinsicFunction
 import org.deeplearning4j.nn.graph.ComputationGraph
 import sampling.experiments.SampleParams
-import utils.{Params, Tokenizer}
+import utils.Tokenizer
 
 import java.util.Locale
 
-abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer) extends IntrinsicFunction {
+abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer, var isEvaluation:Boolean = false) extends IntrinsicFunction {
 
   var avgTime = 0d
   var sampleCount = 0
   var locale = new Locale("tr")
   var dictionaryIndex = Map[String, Int]("dummy" -> 0)
   var dictionary = Map[String, Array[Float]]("dummy" -> Array.fill[Float](params.embeddingLength)(0f))
+
   var computationGraph: ComputationGraph = null
 
 
@@ -46,6 +47,14 @@ abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer)
     retrieve(ngram)
 
   }
+  def update(ngram: String, dictionarySize:Int): Int = {
+
+    if (dictionaryIndex.size < dictionarySize) {
+      dictionaryIndex = dictionaryIndex.updated(ngram, dictionaryIndex.getOrElse(ngram, dictionaryIndex.size))
+    }
+    retrieve(ngram)
+
+  }
 
   def retrieve(ngram: String): Int = {
     dictionaryIndex.getOrElse(ngram, 0)
@@ -61,7 +70,8 @@ abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer)
   }
 
   def forward(token: String): Array[Float] = {
-    val frequentNgrams = tokenizer.ngramStemFilter(token)
+    val lwtoken = token.toLowerCase(locale)
+    val frequentNgrams = tokenizer.ngramStemFilter(lwtoken)
       .flatMap(ngram=> ngram.split("\\s+"))
       .filter(ngram => dictionary.contains(ngram))
 
