@@ -7,6 +7,7 @@ import org.deeplearning4j.nn.conf.layers.ConvolutionLayer.AlgoMode
 import org.deeplearning4j.nn.conf.layers._
 import org.deeplearning4j.nn.graph.ComputationGraph
 import org.deeplearning4j.nn.weights.WeightInit
+import org.deeplearning4j.parallelism.ParallelWrapper
 import org.deeplearning4j.ui.api.UIServer
 import org.deeplearning4j.ui.model.stats.StatsListener
 import org.deeplearning4j.ui.model.storage.InMemoryStatsStorage
@@ -27,7 +28,7 @@ import utils.Tokenizer
 import java.io._
 import scala.io.Source
 
-class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation:Boolean = false) extends EmbeddingModel(params, tokenizer, isEvaluation) {
+class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation: Boolean = false) extends EmbeddingModel(params, tokenizer, isEvaluation) {
 
 
   def onehot(indices: Array[Int]): INDArray = {
@@ -196,26 +197,34 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
 
       override def reset(): Unit = {
         lines = Source.fromFile(filename).getLines()
+
       }
 
       override def hasNext: Boolean = lines.hasNext
 
       override def next(): MultiDataSet = next(0)
     }
-
   }
 
+
+  def getWrapper(model: ComputationGraph): ParallelWrapper = {
+    new ParallelWrapper.Builder(model)
+      .prefetchBuffer(24)
+      .workers(2).averagingFrequency(3).reportScoreAfterAveraging(true)
+      .build
+  }
 
   override def train(filename: String): EmbeddingModel = {
 
     var i = 0
     val modelFile = new File(params.modelFilename())
     val size = Source.fromFile(filename).getLines().size
+    val epocs = (if(isEvaluation) params.evalEpocs else params.epocs)
 
     load()
 
     if (!new File(params.embeddingsFilename()).exists() || isEvaluation) {
-
+      println("Training started...")
       computationGraph = model()
       val statsStorage = new InMemoryStatsStorage()
       val uiServer = UIServer.getInstance()
@@ -228,30 +237,37 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
       val start = System.currentTimeMillis()
 
       sampleCount = 0
+      //val wrapper = getWrapper(computationGraph)
 
+      while (i < epocs) {
 
-      while (i < params.epocs) {
-
+        println()
         println("Epoc : " + i)
 
         computationGraph.fit(multiDataSetIterator)
+        //wrapper.fit(multiDataSetIterator)
         multiDataSetIterator.reset()
 
         i = i + 1
         sampleCount += size
+
         //System.gc()
       }
+
       val passedTime = System.currentTimeMillis() - start
       avgTime = passedTime / (sampleCount)
 
       println("Saving model...")
       computationGraph.save(modelFile)
-      if(!isEvaluation) saveEmbeddings(computationGraph)
+      if (!isEvaluation) saveEmbeddings(computationGraph)
 
       ModelSerializer.writeModel(computationGraph, modelFile, false)
       uiServer.stop()
 
       System.gc()
+    }
+    else if (new File(params.embeddingsFilename()).exists()) {
+      println("Embedding filename exists: " + params.embeddingsFilename())
     }
 
 
@@ -270,7 +286,8 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
       objectOutput.writeObject(ngram)
       objectOutput.writeObject(embeddingVector)
       dictionary = dictionary.updated(ngram, embeddingVector)
-    }}
+    }
+    }
 
     objectOutput.close()
     this
@@ -278,6 +295,7 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
 
   override def load(): SelfAttentionLSTM.this.type = {
     if (new File(params.embeddingsFilename()).exists()) {
+      println("Loading embedding dictionary")
       val objectInput = new ObjectInputStream(new FileInputStream(params.embeddingsFilename()))
       val size = objectInput.readInt()
       Range(0, size).foreach { index => {
@@ -285,8 +303,7 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
         val vector = objectInput.readObject().asInstanceOf[Array[Float]]
         dictionary = dictionary.updated(ngram, vector)
         dictionaryIndex = dictionaryIndex.updated(ngram, index)
-      }
-      }
+      }}
 
       objectInput.close()
     }
@@ -295,7 +312,6 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
   }
 
   def model(): ComputationGraph = {
-
 
     val conf = new NeuralNetConfiguration.Builder()
       .cudnnAlgoMode(AlgoMode.NO_WORKSPACE)

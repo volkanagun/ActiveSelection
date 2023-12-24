@@ -44,6 +44,9 @@ abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer,
     if (dictionaryIndex.size < params.evalDictionarySize) {
       dictionaryIndex = dictionaryIndex.updated(ngram, dictionaryIndex.getOrElse(ngram, dictionaryIndex.size))
     }
+    else{
+      println("Dictionary limit is reached...")
+    }
     retrieve(ngram)
 
   }
@@ -52,6 +55,10 @@ abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer,
     if (dictionaryIndex.size < dictionarySize) {
       dictionaryIndex = dictionaryIndex.updated(ngram, dictionaryIndex.getOrElse(ngram, dictionaryIndex.size))
     }
+    else{
+      println("Dictionary limit is reached...")
+    }
+
     retrieve(ngram)
 
   }

@@ -1,7 +1,5 @@
 package utils
 
-import utils.Tokenizer.tokenize
-
 import java.io._
 import java.util.Locale
 import java.util.concurrent.ForkJoinPool
@@ -488,6 +486,10 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
     ngramFilter(standardTokenizer(sentence))
   }
 
+  def ngramHeadFilter(sentence: String): Array[String] = {
+    ngramHeadFilter(standardTokenizer(sentence))
+  }
+
   def ngramFilter(sentence: Array[String], top: Int = 1): Array[String] = {
 
     val arrays = sentence.flatMap(token => {
@@ -506,6 +508,25 @@ class Tokenizer(val modelFilename: String = "/resources/binary/dictionary", wind
         item.split("[\\#\\s]+")
       })
       flatten
+    })
+    arrays
+  }
+
+  def ngramHeadFilter(sentence: Array[String]): Array[String] = {
+
+    val arrays = sentence.flatMap(token => {
+      val candidates = ngramStemPartition(token)
+        .map(item => item.trim)
+        .filter(_.nonEmpty)
+        .map(item => item + "#")
+
+      candidates.map(item => item.split("[\\#\\s]+"))
+        .filter(item => item.nonEmpty)
+        .filter(item => frequencyBin.contains(item.head))
+        .sortBy(item=> item.head.length)
+        .reverse
+        .take(1)
+        .map(item => item.head)
     })
 
     arrays

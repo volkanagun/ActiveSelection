@@ -16,8 +16,8 @@ class SamplingExperiment {
   val adapterNames = Array("avg")
 
   val selectionSizes = Array(1000, 5000, 25000)
-  val tasks = Array("ner", "pos", "sentiment", "intrinsic")
-  val models = Array("cbow", "skip", "bert")
+  val tasks = Array("sentiment", "pos",  "intrinsic", "ner")
+  val models = Array(/*"cbow", "skip",*/ "self")
   val jsonFilename = "resources/evaluation/analogy/sentence-tr.json"
 
   val tokenizer = new Tokenizer(windowSize = 2).loadZip()
@@ -150,8 +150,6 @@ object SamplingExperiment {
 
   def main(args:Array[String]): Unit = {
     //System.setProperty("org.bytedeco.openblas.load", "mkl")
-
-
     val range = Range(0, 3000).toArray//.par
     //range.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
     range.foreach(_ =>
@@ -159,14 +157,21 @@ object SamplingExperiment {
     )
   }
 
-  def epocs(embeddingModel:String):Int = {
-    if(embeddingModel.contains("lstm")) 3
+
+
+  def init(): Unit = {
+    Nd4j.setDefaultDataTypes(DataType.FLOAT, DataType.FLOAT16)
+    Nd4j.setDefaultDataTypes(DataType.DOUBLE, DataType.FLOAT16)
+    //Nd4j.getMemoryManager.togglePeriodicGc(true)
+    //Nd4j.getMemoryManager.setAutoGcWindow(50)
+  }
+
+  def adjustEpoc(size:Int):Int={
+    if(size == 5000) 3
+    else if(size == 1000) 2
     else 3
   }
 
-  def init(): Unit = {
-    Nd4j.setDefaultDataTypes(DataType.BFLOAT16, DataType.BFLOAT16)
-  }
 
   def evaluate(experiments: SamplingExperiment, args: Array[String]): Unit = {
     val breaks = new Breaks()
@@ -183,15 +188,15 @@ object SamplingExperiment {
                 crrParams.maxSelectSize = selectSize
                 crrParams.adapterName = adapterName
                 crrParams.embeddingModel = crrModel
-                crrParams.epocs = 3
-                crrParams.batchSize = 96
-                crrParams.evalBatchSize = 96
-                crrParams.evalEpocs = 3
-
-
+                crrParams.epocs = adjustEpoc(selectSize)
+                crrParams.batchSize = 48
+                crrParams.evalBatchSize = 48
+                crrParams.evalEpocs = 7
+                crrParams.embeddingRandomMask = 1
                 if (experiments.evaluate(crrParams, crrModel, taskName)) {
                   breaks.break()
                 }
+
               })
             })
           })

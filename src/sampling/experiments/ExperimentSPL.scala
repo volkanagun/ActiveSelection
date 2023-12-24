@@ -1,7 +1,5 @@
 package sampling.experiments
 
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods.parse
 import sampling.adapters.{DirectSelect, MajorityVoting, MovingAverage, ScoreAdapter}
 import sampling.data.TextInstance
 import sampling.methods.clustering.{KMeansScorer, LanguageModelScorer}
@@ -9,13 +7,11 @@ import sampling.methods.committee.{KLScorer, VEScorer, VotedDivergence}
 import sampling.methods.core._
 import sampling.methods.nn.{BoltzmannScorer, HopfieldScorer, LeastSquares}
 import sampling.methods.statistical._
-import utils.Tokenizer
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent
 import scala.collection.parallel.CollectionConverters.ArrayIsParallelizable
 import scala.collection.parallel.ForkJoinTaskSupport
-
 import scala.io.Source
 import scala.util.control.Breaks
 
@@ -76,13 +72,13 @@ object ExperimentSPL {
     }
 
     else if ("Boltzmann".equals(sampleName)) {
-      new BoltzmannScorer(embedParams.secondDictionarySize, embedParams.embeddingWindowSize, embedParams.hiddenSize)
+      new BoltzmannScorer(embedParams.secondDictionarySize, embedParams.windowSize, embedParams.hiddenSize)
     }
     else if ("Least".equals(sampleName)) {
       new LeastSquares(embedParams.maxInitSamples, embedParams.secondDictionarySize, embedParams.embeddingSize)
     }
     else if ("Hopfield".equals(sampleName)) {
-      new HopfieldScorer(embedParams.embeddingSize, embedParams.embeddingWindowSize)
+      new HopfieldScorer(embedParams.embeddingSize, embedParams.windowSize)
     }
     else if ("Mahalonabis".equals(sampleName)) {
       new MahalonabisScore(embedParams.embeddingDictionarySize, embedParams.embeddingSize)

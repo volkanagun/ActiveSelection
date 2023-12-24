@@ -1,6 +1,6 @@
 package sampling.experiments
 
-import models.{CBOWModel, EmbeddingModel, FeedForwardBERT, SkipGramModel}
+import models.{CBOWModel, EmbeddingModel, FeedForwardSelf, SkipGramModel}
 import utils.Tokenizer
 
 import java.io.File
@@ -14,7 +14,7 @@ class SampleParams {
   var ngramCombinationSize = 10
   var windowSize = 20
   var embeddingWindowSize = 15
-  var embeddingRandomMask = 3
+  var embeddingRandomMask = 5
   var committee = 10
   var batchSize = 32
   var nthreads = 1
@@ -95,7 +95,7 @@ class SampleParams {
   def createModel(name: String, tokenizer: Tokenizer): EmbeddingModel = {
     if (name.startsWith("cbow")) new CBOWModel(this, tokenizer)
     else if (name.startsWith("skip")) new SkipGramModel(this, tokenizer)
-    else if (name.startsWith("bert")) new FeedForwardBERT(this, tokenizer)
+    else if (name.startsWith("self")) new FeedForwardSelf(this, tokenizer)
     else null
   }
 
