@@ -1,12 +1,9 @@
 package models
 
-import org.deeplearning4j.nn.conf.graph.PreprocessorVertex
-import org.deeplearning4j.nn.conf.graph.rnn.LastTimeStepVertex
+import org.deeplearning4j.nn.conf.NeuralNetConfiguration
 import org.deeplearning4j.nn.conf.inputs.InputType
 import org.deeplearning4j.nn.conf.layers.ConvolutionLayer.AlgoMode
-import org.deeplearning4j.nn.conf.layers.{DenseLayer, EmbeddingSequenceLayer, GlobalPoolingLayer, LSTM, OutputLayer, PoolingType, RnnOutputLayer, SelfAttentionLayer}
-import org.deeplearning4j.nn.conf.preprocessor.RnnToFeedForwardPreProcessor
-import org.deeplearning4j.nn.conf.{NeuralNetConfiguration, RNNFormat}
+import org.deeplearning4j.nn.conf.layers._
 import org.deeplearning4j.nn.graph.ComputationGraph
 import org.deeplearning4j.nn.weights.WeightInit
 import org.nd4j.linalg.activations.Activation
@@ -18,15 +15,12 @@ import org.nd4j.linalg.dataset.api.iterator.MultiDataSetIterator
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.learning.config.Adam
 import org.nd4j.linalg.lossfunctions.LossFunctions
-import org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction
 import sampling.experiments.SampleParams
 import utils.Tokenizer
 
-import java.lang
 import scala.collection.mutable
 import scala.collection.parallel.CollectionConverters.ArrayIsParallelizable
 import scala.io.Source
-import scala.util.Random
 
 class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAttentionLSTM(params, tokenizer) {
   //use BERT
@@ -39,7 +33,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
   var dictionarySet = Set[String]()
   var dictionarySize = 0
 
-  init(100000)
+  init(params.embeddingDictionarySize)
 
   case class Pairs(input: Array[String], output: Array[String], inputMask: Array[Float], outputMask: Array[Float])
 
@@ -55,7 +49,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
 
     ntokens.sliding(windowSize, 1).foreach(tokens => {
       for (i <- 0 until params.embeddingRandomMask) {
-        val index = Random.nextInt(windowSize)
+        val index =  windowSize - 1
         val maskInput = Array.fill[Float](windowSize)(1f)
         val maskOutput = Array.fill[Float](windowSize)(1f)
         val output = Array(tokens(index))
@@ -73,26 +67,27 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
   def init(size:Int):Unit= {
 
     //Compute dictionary size
-    val dataset = Source.fromFile(params.sampledDataset())
-      .getLines().toArray
+    val dataset = (Source.fromFile(params.sampledDataset())
+      .getLines().toArray).par
       .map(line => tokenize(line))
+      .toArray
 
     println("Dataset size: " + dataset.length)
 
     maxSize = dataset.length
-    maxLength = 150;
+    maxLength = 100;
     stepSize = maxSize / maxLength
-
 
     val array = dataset.flatMap(tokens=> tokens)
       .groupBy(item=> item).map(pair=> (pair._1, pair._2.length))
       .toArray
 
-
     println("Total Dictionary size: " + array.size)
 
     dictionarySet = array.sortBy(_._2).reverse.take(size)
       .map(_._1).toSet + dummy
+
+    dictionarySet.foreach(token=> dictionaryIndex = dictionaryIndex.updated(token, dictionaryIndex.size))
 
     dictionarySize = dictionarySet.size + 100
     println("Frequent Dictionary size: " + dictionarySize)
@@ -101,7 +96,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
 
   }
 
-  def progress(message: String, length: Int, crr:Int): Unit = {
+/*  override def progress(message: String, length: Int, crr:Int): Unit = {
     val incomplete = '░'
     val complete = '█'
     val builder = new StringBuilder()
@@ -113,7 +108,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
       val progressBar = "\r" + builder
       System.out.print(progressBar)
     }
-  }
+  }*/
 
 
   override def iterator(filename: String): MultiDataSetIterator = {
@@ -148,7 +143,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
           var inputArray = Array[Int]()
 
           input.foreach(ngram => {
-            inputArray :+= update(ngram, dictionarySize)
+            inputArray :+= retrieve(ngram)
           })
 
         /*  var outputArray = Array[Int]()
@@ -156,7 +151,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
             outputArray :+= update(ngram, dictionarySize)
           })*/
 
-          val outputIndice = update(output(0), dictionarySize)
+          val outputIndice = retrieve(output(0))
           val inputIndex = index(inputArray, windowSize)
           //val outputIndex = onehot(outputArray, dictionarySize, windowSize)
           val outputIndex = onehot(outputIndice, dictionarySize)
@@ -188,7 +183,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
 
       override def resetSupported(): Boolean = true
 
-      override def asyncSupported(): Boolean = false
+      override def asyncSupported(): Boolean = true
 
       override def reset(): Unit = {
         crrCount = 0;
@@ -241,7 +236,7 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
   override def model(): ComputationGraph = {
 
     val conf = new NeuralNetConfiguration.Builder()
-      .cudnnAlgoMode(AlgoMode.NO_WORKSPACE)
+      .cudnnAlgoMode(AlgoMode.PREFER_FASTEST)
       .dataType(DataType.FLOAT)
       .activation(Activation.TANH)
       .updater(new Adam(params.lrate))
@@ -257,10 +252,10 @@ class FeedForwardSelf(params: SampleParams, tokenizer: Tokenizer) extends SelfAt
         .activation(Activation.TANH).build, "embedding")
       .layer("attention", new SelfAttentionLayer.Builder().nOut(params.embeddingHiddenLength).nHeads(params.nheads).projectInput(true).build(), "input-lstm")
       .layer("pooling", new GlobalPoolingLayer.Builder().poolingType(PoolingType.MAX).build(), "attention")
-      .layer("dense_base", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "pooling")
-      .layer("dense", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "dense_base")
+      //.layer("dense_base", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "pooling")
+      //.layer("dense", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "dense_base")
       .layer("output", new OutputLayer.Builder().nIn(params.embeddingHiddenLength).nOut(dictionarySize).activation(Activation.SOFTMAX)
-        .lossFunction(LossFunctions.LossFunction.MCXENT).build, "dense")
+        .lossFunction(LossFunctions.LossFunction.MCXENT).build, "pooling")
       .setInputTypes(InputType.recurrent(dictionarySize))
       .build()
 

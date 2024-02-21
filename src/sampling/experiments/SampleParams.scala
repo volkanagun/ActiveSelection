@@ -12,12 +12,13 @@ class SampleParams {
   var hiddenSize = 20
   var clusterSize = 20
   var ngramCombinationSize = 10
-  var windowSize = 20
-  var embeddingWindowSize = 15
+  var evalWindowSize = 50
+  var keyWindowSize = 20
+  var embeddingWindowSize = 20
   var embeddingRandomMask = 5
   var committee = 10
   var batchSize = 32
-  var nthreads = 1
+  var nthreads = 12
   var topSelects = 1
 
   var knn = 7
@@ -67,6 +68,7 @@ class SampleParams {
 
   var extractorName: String = "feature"
   var scorerName: String = null
+  var forceSample: Boolean = true
   var adapterName: String = "avg"
 
 
@@ -84,6 +86,7 @@ class SampleParams {
 
   var evalBatchSize = 32
   var evalEpocs = 1
+  var evalRate = 0.01
   var evalDictionarySize = 1000000
   var evalUseEmbeddings = true
 
@@ -127,7 +130,7 @@ class SampleParams {
       secondDictionarySize,
       embeddingSize,
       hiddenSize,
-      windowSize,
+      keyWindowSize,
       ngramCombinationSize,
       clusterSize,
       tokenLength,
@@ -153,7 +156,7 @@ class SampleParams {
     copyParams.hiddenSize = hiddenSize
     copyParams.embeddingDictionarySize = embeddingDictionarySize
     copyParams.secondDictionarySize = secondDictionarySize
-    copyParams.windowSize = windowSize
+    copyParams.evalWindowSize = evalWindowSize
     copyParams.maxSentenceSize = maxSentenceSize
 
     copyParams.minSentenceLength = minSentenceLength
@@ -250,7 +253,7 @@ class SampleParams {
       tag("TOKEN_LENGTH", tokenLength.toString) +
       tag("CLUSTER_SIZE", clusterSize.toString) +
       tag("KNN", knn.toString) +
-      tag("WINDOW_LENGTH", windowSize.toString) +
+      tag("WINDOW_LENGTH", evalWindowSize.toString) +
       tag("MIN_SENTENCE_LENGTH", minSentenceLength.toString) +
       tag("MAX_SENTENCE_LENGTH", maxSentenceLength.toString) +
       tag("NTHREADS", nthreads.toString) +

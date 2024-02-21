@@ -6,10 +6,13 @@ import utils.Tokenizer
 
 import scala.io.Source
 
-class ExtrinsicSentiment(params:SampleParams, tokenizer: Tokenizer) extends ExtrinsicELMO(params, tokenizer, true){
+class ExtrinsicSentiment(params:SampleParams, tokenizer: Tokenizer) extends ExtrinsicSelf(params, tokenizer, true){
 
   var categories :Array[String] = null
   var trainingSize = 5000
+
+  init()
+
   override def getClassifier(): String = "sentiment"
 
   override def getTraining(): String = {

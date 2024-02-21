@@ -9,10 +9,14 @@ class MaximumScore(val scorer:InstanceScorer, val topK:Int, maxSelectSize:Int) e
     val scores = instances.map(textInstance => (scorer.score(textInstance), textInstance))
       .filter(pair=> !pair._1.isNaN && !pair._1.isInfinite)
     val topCount = maxSelectSize - count.toInt - 1
-    val maximum = scores.toArray.sortBy(_._1).reverse
+    val maximum = scores.sortBy(_._1).reverse
       .map(_._2)
       .take(math.min(topCount, topK))
-    update(scores.toArray)
+
+    maximum.foreach(instance=> scorer.add(instance))
+    scorer.postCompute()
+
+    update(scores)
     maximum
   }
 

@@ -1,6 +1,6 @@
 package sampling.experiments
 
-import sampling.adapters.{DirectSelect, MajorityVoting, MovingAverage, ScoreAdapter}
+import sampling.adapters.{DirectSelect, MajorityVoting, MaximumScore, MovingAverage, ScoreAdapter}
 import sampling.data.TextInstance
 import sampling.methods.clustering.{KMeansScorer, LanguageModelScorer}
 import sampling.methods.committee.{KLScorer, VEScorer, VotedDivergence}
@@ -13,28 +13,29 @@ import java.util.concurrent
 import scala.collection.parallel.CollectionConverters.ArrayIsParallelizable
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.io.Source
+import scala.util.Random
 import scala.util.control.Breaks
 
 object ExperimentSPL {
 
-  val samplingNames = Array("KMeans", "VocabSelect", "VotedDivergence", "VE", "LM", "Mahalonabis", "Euclidean", "Entropy", "Hopfield", "KL", "Least", "Boltzmann")
-  val taskNames = Array("intrinsic", "ner", "pos", "sentiment")
+  val samplingNames = Array("Mahalonabis", "KMeans", "VocabSelect", "VotedDivergence", "VE", "LM", "Euclidean", "Entropy", "Hopfield", "KL", "Least", "Boltzmann")
+  val taskNames = Array(/*"intrinsic", "ner", "pos", */"sentiment")
 
   //val samplingNames = Array("Boltzmann")
   val tokenization = Array("feature")
   val adapterNames = Array("avg")
-  val selectionSizes = Array(1000, 5000, 25000/*, 100000*/)
+  val selectionSizes = Array(/*1000*,*/ 5000, 25000)
   val embedParams = new SampleParams()
 
   embedParams.committee = 10
   embedParams.clusterSize = 20
-  embedParams.windowSize = 20
+  embedParams.evalWindowSize = 20
   embedParams.kmoving = 200
-  embedParams.kselectSize = 10
+  embedParams.kselectSize = 5
 
   embedParams.freqcutoff = 10
   embedParams.tokenLength = 5
-  embedParams.threshold = 0.015
+  embedParams.threshold = 0.0
   embedParams.ngramCombinationSize = 10
   embedParams.useWords = true
   embedParams.maxSelectSize = embedParams.max100thausand
@@ -50,6 +51,7 @@ object ExperimentSPL {
   def createAdapter(adapterName: String, scorer: InstanceScorer, k: Int, kselectSize: Int, maxSelectSize: Int, threshold: Double): ScoreAdapter = {
     if ("avg".equals(adapterName) && scorer.isInstanceOf[VocabSelect]) new DirectSelect(maxSelectSize)
     else if ("avg".equals(adapterName)) new MovingAverage(scorer, k, kselectSize, maxSelectSize, threshold)
+    else if("max".equals(adapterName)) new MaximumScore(scorer, kselectSize, maxSelectSize)
     else {
       val criteriaScorers = Array("VotedDivergence", "Hopfield", "VE", "LM", "Mahalonabis", "Euclidean", "Entropy", "KMeans", "Boltzmann", "KL", "Least").map(createCriterias(_))
       new MajorityVoting(criteriaScorers, k, kselectSize, maxSelectSize, threshold)
@@ -62,29 +64,29 @@ object ExperimentSPL {
       new KMeansScorer(embedParams.secondDictionarySize, embedParams.embeddingSize, embedParams.clusterSize, embedParams.knn)
     }
     else if ("KL".equals(sampleName)) {
-      new KLScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize, embedParams.windowSize, embedParams.committee)
+      new KLScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize, embedParams.evalWindowSize, embedParams.committee)
     }
     else if ("VE".equals(sampleName)) {
-      new VEScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize, embedParams.windowSize, embedParams.committee)
+      new VEScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize, embedParams.evalWindowSize, embedParams.committee)
     }
     else if ("LM".equals(sampleName)) {
       new LanguageModelScorer(embedParams.embeddingDictionarySize, embedParams.embeddingSize)
     }
 
     else if ("Boltzmann".equals(sampleName)) {
-      new BoltzmannScorer(embedParams.secondDictionarySize, embedParams.windowSize, embedParams.hiddenSize)
+      new BoltzmannScorer(embedParams.secondDictionarySize, embedParams.evalWindowSize, embedParams.hiddenSize)
     }
     else if ("Least".equals(sampleName)) {
       new LeastSquares(embedParams.maxInitSamples, embedParams.secondDictionarySize, embedParams.embeddingSize)
     }
     else if ("Hopfield".equals(sampleName)) {
-      new HopfieldScorer(embedParams.embeddingSize, embedParams.windowSize)
+      new HopfieldScorer(embedParams.embeddingSize, embedParams.evalWindowSize)
     }
     else if ("Mahalonabis".equals(sampleName)) {
       new MahalonabisScore(embedParams.embeddingDictionarySize, embedParams.embeddingSize)
     }
     else if ("VotedDivergence".equals(sampleName)) {
-      new VotedDivergence(embedParams.secondDictionarySize, embedParams.secondDictionarySize, embedParams.windowSize, embedParams.committee)
+      new VotedDivergence(embedParams.secondDictionarySize, embedParams.secondDictionarySize, embedParams.evalWindowSize, embedParams.committee)
     }
     else if ("Entropy".equals(sampleName)) {
       new BinaryEntropyScorer(embedParams.embeddingDictionarySize, embedParams.secondDictionarySize)
@@ -123,10 +125,12 @@ object ExperimentSPL {
   }
 
   def createMainDataset(sampleParams: SampleParams, extractor: Extractor, dictionaryFilename: String, datasetFilename: String): Iterator[TextInstance] = {
+
     val f = new File(datasetFilename)
     if (f.exists()) {
-      Source.fromFile(f).getLines().filter(sentence => sentence.length > sampleParams.minSentenceLength)
-        .map(sentence => extractor.itemize(new TextInstance(sentence)))
+      val array =  Source.fromFile(f).getLines().filter(sentence => sentence.length > sampleParams.minSentenceLength)
+      val random = new Random(1137)
+      random.shuffle(array.toSeq).iterator.map(sentence => extractor.itemize(new TextInstance(sentence)))
     }
     else {
       val pw = new PrintWriter(f)
@@ -138,7 +142,7 @@ object ExperimentSPL {
 
       var set = Set[Int]()
 
-      evalDictionary.zipWithIndex.par.map(wordPair => {
+      val array = evalDictionary.zipWithIndex.par.map(wordPair => {
         val word = wordPair._1
         var count = 0
         val iter = mainSentences.iterator
@@ -153,7 +157,9 @@ object ExperimentSPL {
           }
         }
         selectedSentences
-      }).toArray.foreach(sentences => sentences.foreach(sentence=> pw.println(sentence)))
+      }).toArray
+
+      array.foreach(sentences => sentences.foreach(sentence=> pw.println(sentence)))
 
       pw.close()
 
@@ -190,7 +196,7 @@ object ExperimentSPL {
 
     val samplesFilename = sampleParams.sampledDataset()
 
-    if (!new File(samplesFilename).exists()) {
+    if (!new File(samplesFilename).exists() || sampleParams.forceSample) {
 
       val extractor = createExtractor(sampleParams.extractorName)
       if (extractor.exists()) {
@@ -260,7 +266,7 @@ object ExperimentSPL {
           parCollection.foreach(scorerName => {
 
             adapterNames.foreach(adapterName => {
-              if (adapterName.equals("avg")) {
+              if (adapterName.equals("avg")||adapterName.equals("max")) {
                 val copyParams = embedParams.copy()
                 copyParams.taskName = taskName
                 copyParams.adapterName = adapterName

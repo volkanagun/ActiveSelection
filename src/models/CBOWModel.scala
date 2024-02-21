@@ -43,7 +43,7 @@ class CBOWModel(params:SampleParams, tokenizer: Tokenizer) extends EmbeddingMode
         .workers(48)
         .minWordFrequency(params.freqCutoff)
         .layerSize(params.embeddingLength)
-        .windowSize(params.windowSize)
+        .windowSize(params.evalWindowSize)
         .epochs(params.epocs)
         .batchSize(params.batchSize)
         .seed(42)

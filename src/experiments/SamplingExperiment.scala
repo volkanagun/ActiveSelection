@@ -8,16 +8,19 @@ import sampling.experiments.SampleParams
 import utils.{Params, Tokenizer}
 
 import java.io.File
+import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
+import scala.util.Random
 import scala.util.control.Breaks
 
 class SamplingExperiment {
 
-  val samplingNames = Array("VocabSelect", "VotedDivergence", "KMeans", "KL", "VE", "LM", "Mahalonabis", "Euclidean", "Entropy", "Least", "Boltzmann", "Hopfield")
+  val samplingNames = Array("VocabSelect", /*"VotedDivergence",*/ "KMeans","KL" ,"VE", "LM", "Mahalonabis", "Euclidean", /*"Entropy",*/ "Least", "Boltzmann", "Hopfield")
+  //val samplingNames = Array("Mahalonabis")
   val adapterNames = Array("avg")
 
-  val selectionSizes = Array(1000, 5000, 25000)
-  val tasks = Array("sentiment", "pos",  "intrinsic", "ner")
-  val models = Array(/*"cbow", "skip",*/ "self")
+  val selectionSizes = Array(1000/*,5000, 25000*/)
+  val tasks = Array(/*"ner","pos", "intrinsic",*/"sentiment")
+  val models = Array(/*"cbow", "skip", */"self")
   val jsonFilename = "resources/evaluation/analogy/sentence-tr.json"
 
   val tokenizer = new Tokenizer(windowSize = 2).loadZip()
@@ -53,16 +56,15 @@ class SamplingExperiment {
     keyID
   }
 
-  def evaluate(embedParams: SampleParams, model: String, taskName: String): Boolean = {
-    if ("intrinsic".equals(taskName)) evaluateIntrinsic(embedParams, model)
-    else if ("ner".equals(taskName)) evaluateExtrinsic(embedParams, model, new ExtrinsicNER(embedParams, tokenizer))
-    else if ("pos".equals(taskName)) evaluateExtrinsic(embedParams, model, new ExtrinsicPOS(embedParams, tokenizer))
-    else if ("sentiment".equals(taskName)) evaluateExtrinsic(embedParams, model, new ExtrinsicSentiment(embedParams, tokenizer))
+  def evaluate(embedParams: SampleParams, model: String): Boolean = {
+    if ("intrinsic".equals(embedParams.taskName)) evaluateIntrinsic(embedParams, model)
+    else if ("ner".equals(embedParams.taskName)) evaluateExtrinsic(embedParams, model, new ExtrinsicNER(embedParams, tokenizer))
+    else if ("pos".equals(embedParams.taskName)) evaluateExtrinsic(embedParams, model, new ExtrinsicPOS(embedParams, tokenizer))
+    else if ("sentiment".equals(embedParams.taskName)) evaluateExtrinsic(embedParams, model, new ExtrinsicSentiment(embedParams, tokenizer))
     else false
   }
 
-  def evaluateExtrinsic(embedParams: SampleParams, model: String, function: ExtrinsicELMO): Boolean = {
-
+  def evaluateExtrinsic(embedParams: SampleParams, model: String, function: ExtrinsicSelf): Boolean = {
 
     val sentenceFilename = embedParams.sampledDataset()
     //embedParams.textFolder + function.getClassifier() +"/" + embedParams.selectionMethod + "-" + embedParams.maxSelectSize + "-" + key + ".txt"
@@ -72,6 +74,7 @@ class SamplingExperiment {
     val resultName = embedParams.resultFilename(modelling)
 
     if (!new File(resultName).exists() && new File(sentenceFilename).exists()) {
+      println("Sentence filename: " + sentenceFilename + " Task: " + function.getClassifier())
       println("Result filename: " + resultName + " Task: " + function.getClassifier())
       val mainEvaluation = new IntrinsicEvaluation(resultName)
       mainEvaluation.functions :+= function
@@ -87,7 +90,8 @@ class SamplingExperiment {
       true
     }
     else if (new File(resultName).exists()) {
-      println("Found: " + resultName)
+      println("Found sentence: " + sentenceFilename)
+      println("Found result: " + resultName)
       false
     }
     else {
@@ -110,7 +114,6 @@ class SamplingExperiment {
       val mainEvaluation = new IntrinsicEvaluation(resultName)
         .attachEvaluations(jsonFilename)
         .compile()
-
 
       mainEvaluation.filter(Array("SEMEVAL"))
       val words = mainEvaluation.universe()
@@ -150,7 +153,7 @@ object SamplingExperiment {
 
   def main(args:Array[String]): Unit = {
     //System.setProperty("org.bytedeco.openblas.load", "mkl")
-    val range = Range(0, 3000).toArray//.par
+    val range = Range(0, 1).toArray//.par
     //range.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
     range.foreach(_ =>
       evaluate(new SamplingExperiment, args)
@@ -160,16 +163,17 @@ object SamplingExperiment {
 
 
   def init(): Unit = {
-    Nd4j.setDefaultDataTypes(DataType.FLOAT, DataType.FLOAT16)
-    Nd4j.setDefaultDataTypes(DataType.DOUBLE, DataType.FLOAT16)
+    Nd4j.setDefaultDataTypes(DataType.FLOAT, DataType.BFLOAT16)
+    Nd4j.setDefaultDataTypes(DataType.DOUBLE, DataType.BFLOAT16)
     //Nd4j.getMemoryManager.togglePeriodicGc(true)
     //Nd4j.getMemoryManager.setAutoGcWindow(50)
   }
 
   def adjustEpoc(size:Int):Int={
-    if(size == 5000) 3
-    else if(size == 1000) 2
-    else 3
+    if(size == 5000) 4
+    else if(size == 1000) 5
+    else if(size == 25000) 3
+    else 2
   }
 
 
@@ -185,18 +189,19 @@ object SamplingExperiment {
                 println(s"Evaluating ${scorerName} - ${selectSize} on task ${taskName}")
                 val crrParams = experiments.embedParams.copy()
                 crrParams.scorerName = scorerName
+                crrParams.taskName = taskName
                 crrParams.maxSelectSize = selectSize
                 crrParams.adapterName = adapterName
                 crrParams.embeddingModel = crrModel
                 crrParams.epocs = adjustEpoc(selectSize)
-                crrParams.batchSize = 48
-                crrParams.evalBatchSize = 48
+                crrParams.batchSize = 128
+                crrParams.evalBatchSize = 64
                 crrParams.evalEpocs = 7
                 crrParams.embeddingRandomMask = 1
-                if (experiments.evaluate(crrParams, crrModel, taskName)) {
-                  breaks.break()
-                }
 
+                if (experiments.evaluate(crrParams, crrModel)) {
+                  //breaks.break()
+                }
               })
             })
           })

@@ -27,6 +27,7 @@ import utils.Tokenizer
 
 import java.io._
 import scala.io.Source
+import scala.util.Random
 
 class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation: Boolean = false) extends EmbeddingModel(params, tokenizer, isEvaluation) {
 
@@ -152,8 +153,8 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
   def iterator(filename: String): MultiDataSetIterator = {
 
     new MultiDataSetIterator {
-
-      var lines = Source.fromFile(filename).getLines()
+      var array = Random.shuffle(Source.fromFile(filename).getLines().toSeq)
+      var lines = array.iterator
 
 
       override def next(i: Int): MultiDataSet = {
@@ -193,11 +194,11 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
 
       override def resetSupported(): Boolean = true
 
-      override def asyncSupported(): Boolean = false
+      override def asyncSupported(): Boolean = true
 
       override def reset(): Unit = {
-        lines = Source.fromFile(filename).getLines()
-
+        array = Random.shuffle(Source.fromFile(filename).getLines().toSeq)
+        lines = array.iterator
       }
 
       override def hasNext: Boolean = lines.hasNext
@@ -209,8 +210,8 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
 
   def getWrapper(model: ComputationGraph): ParallelWrapper = {
     new ParallelWrapper.Builder(model)
-      .prefetchBuffer(24)
-      .workers(2).averagingFrequency(3).reportScoreAfterAveraging(true)
+      .prefetchBuffer(2)
+      .workers(2).averagingFrequency(2).reportScoreAfterAveraging(true)
       .build
   }
 
@@ -219,7 +220,7 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
     var i = 0
     val modelFile = new File(params.modelFilename())
     val size = Source.fromFile(filename).getLines().size
-    val epocs = (if(isEvaluation) params.evalEpocs else params.epocs)
+    val epocs = (if (isEvaluation) params.evalEpocs else params.epocs)
 
     load()
 
@@ -243,14 +244,19 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
 
         println()
         println("Epoc : " + i)
-
-        computationGraph.fit(multiDataSetIterator)
-        //wrapper.fit(multiDataSetIterator)
-        multiDataSetIterator.reset()
-
-        i = i + 1
-        sampleCount += size
-
+        try {
+          //wrapper.fit(multiDataSetIterator)
+          computationGraph.fit(multiDataSetIterator)
+          multiDataSetIterator.reset()
+          i = i + 1
+          sampleCount += size
+        }
+        catch {
+          case e: Exception => {
+            e.printStackTrace()
+            println("Epoc error...")
+          }
+        }
         //System.gc()
       }
 
@@ -273,6 +279,20 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
 
     this
 
+  }
+
+  def progress(message: String, length: Int, crr: Int): Unit = {
+    val incomplete = '░'
+    val complete = '█'
+    val builder = new StringBuilder()
+    Range(0, length).map(_ => incomplete).foreach(builder.append)
+
+    //System.out.println(message)
+    for (i <- 0 until crr) {
+      builder.replace(i, i + 1, String.valueOf(complete))
+      val progressBar = "\r" + builder
+      System.out.print(progressBar)
+    }
   }
 
 
@@ -298,13 +318,17 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
       println("Loading embedding dictionary")
       val objectInput = new ObjectInputStream(new FileInputStream(params.embeddingsFilename()))
       val size = objectInput.readInt()
+
+      dictionaryIndex = Map[String, Int]("dummy" -> 0)
+      dictionary = Map[String, Array[Float]]("dummy" -> Array.fill[Float](params.embeddingLength)(random.nextFloat()))
+
       Range(0, size).foreach { index => {
         val ngram = objectInput.readObject().asInstanceOf[String]
         val vector = objectInput.readObject().asInstanceOf[Array[Float]]
         dictionary = dictionary.updated(ngram, vector)
         dictionaryIndex = dictionaryIndex.updated(ngram, index)
-      }}
-
+      }
+      }
       objectInput.close()
     }
     this
@@ -314,7 +338,7 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
   def model(): ComputationGraph = {
 
     val conf = new NeuralNetConfiguration.Builder()
-      .cudnnAlgoMode(AlgoMode.NO_WORKSPACE)
+      .cudnnAlgoMode(AlgoMode.PREFER_FASTEST)
       .dataType(DataType.FLOAT)
       .activation(Activation.TANH)
       .updater(new Adam(params.lrate))
@@ -330,10 +354,10 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
         .activation(Activation.TANH).build, "embedding")
       .layer("attention", new SelfAttentionLayer.Builder().nOut(params.embeddingHiddenLength).nHeads(params.nheads).projectInput(true).build(), "input-lstm")
       .layer("pooling", new GlobalPoolingLayer.Builder().poolingType(PoolingType.MAX).build(), "attention")
-      .layer("dense_base", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "pooling")
-      .layer("dense", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "dense_base")
+      //.layer("dense_base", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "pooling")
+      //.layer("dense", new DenseLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingHiddenLength).activation(Activation.SIGMOID).build(), "dense_base")
       .layer("output", new OutputLayer.Builder().nIn(params.embeddingHiddenLength).nOut(params.embeddingDictionarySize).activation(Activation.SOFTMAX)
-        .lossFunction(LossFunctions.LossFunction.MCXENT).build, "dense")
+        .lossFunction(LossFunctions.LossFunction.MCXENT).build, "pooling")
       .setInputTypes(InputType.recurrent(params.embeddingDictionarySize))
       .build()
 

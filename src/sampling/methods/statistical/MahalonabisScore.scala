@@ -23,7 +23,6 @@ class MahalonabisScore(dictionarySize:Int, embeddingSize:Int) extends IDScorer(d
 
     mean = mean.zip(array).map(pair => pair._1 + pair._2 / count)
     count += 1
-
     this
   }
 
@@ -67,7 +66,7 @@ class MahalonabisScore(dictionarySize:Int, embeddingSize:Int) extends IDScorer(d
 
   override def init(instances: Array[TextInstance]): MahalonabisScore.this.type = {
     instances.foreach(instance=> add(instance))
-    this
+    postCompute()
   }
 
 }

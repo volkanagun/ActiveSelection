@@ -18,11 +18,13 @@
     </properties>
 
     <dependencies>
-<!--         <dependency>
+<!--
+         <dependency>
              <groupId>org.nd4j</groupId>
              <artifactId>nd4j-native-platform</artifactId>
              <version>${nd4j.version}</version>
-         </dependency>-->
+         </dependency>
+-->
 
         <dependency>
             <groupId>org.nd4j</groupId>

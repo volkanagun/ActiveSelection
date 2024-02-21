@@ -20,7 +20,7 @@ import utils.Tokenizer
 import scala.io.Source
 import scala.util.Random
 
-class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends ExtrinsicELMO(params, tokenizer, true) {
+class ExtrinsicPOS(params: SampleParams, tokenizer: Tokenizer) extends ExtrinsicSelf(params, tokenizer, true) {
 
   var categories: Array[String] = null
 

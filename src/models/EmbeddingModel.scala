@@ -6,6 +6,7 @@ import sampling.experiments.SampleParams
 import utils.Tokenizer
 
 import java.util.Locale
+import scala.util.Random
 
 abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer, var isEvaluation:Boolean = false) extends IntrinsicFunction {
 
@@ -13,7 +14,8 @@ abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer,
   var sampleCount = 0
   var locale = new Locale("tr")
   var dictionaryIndex = Map[String, Int]("dummy" -> 0)
-  var dictionary = Map[String, Array[Float]]("dummy" -> Array.fill[Float](params.embeddingLength)(0f))
+  var random = new Random(17)
+  var dictionary = Map[String, Array[Float]]("dummy" -> Array.fill[Float](params.embeddingLength)(random.nextFloat()))
 
   var computationGraph: ComputationGraph = null
 
@@ -64,7 +66,7 @@ abstract class EmbeddingModel(val params: SampleParams, val tokenizer:Tokenizer,
   }
 
   def retrieve(ngram: String): Int = {
-    dictionaryIndex.getOrElse(ngram, 0)
+    dictionaryIndex.getOrElse(ngram, dictionaryIndex("dummy"))
   }
 
   def tokenize(sentence: String): Array[String] = {

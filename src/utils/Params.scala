@@ -12,7 +12,7 @@ class Params {
   var embeddingLength:Int = 100
   var modelWindowLength:Int = 20
 
-  var dictionarySize:Int = 200000
+  var dictionarySize:Int = 100000
   var freqCutoff:Int = 0
 
 
@@ -37,7 +37,7 @@ class Params {
   var tokenLength = 5
   var clusterSize = 20
   var knn = 7
-  var windowLength = 10
+  var windowLength = 20
 
   var minSentenceLength = 0
   var maxSentenceLength = 500

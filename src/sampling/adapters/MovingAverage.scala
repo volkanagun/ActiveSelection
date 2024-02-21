@@ -38,7 +38,6 @@ class MovingAverage(val scorer:InstanceScorer, val k:Int, val kselect:Int, val s
 
       val queried = selected.map(_._3)
       queried.foreach(textInstance => scorer.add(textInstance))
-
       scorer.postCompute()
       queried
     }
