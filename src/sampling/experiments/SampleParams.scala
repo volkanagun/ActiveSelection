@@ -12,7 +12,7 @@ class SampleParams {
   var hiddenSize = 20
   var clusterSize = 20
   var ngramCombinationSize = 10
-  var evalWindowSize = 50
+  var evalWindowSize = 600
   var keyWindowSize = 20
   var embeddingWindowSize = 20
   var embeddingRandomMask = 5

@@ -18,7 +18,7 @@ class SamplingExperiment {
   //val samplingNames = Array("Mahalonabis")
   val adapterNames = Array("avg")
 
-  val selectionSizes = Array(1000/*,5000, 25000*/)
+  val selectionSizes = Array(1000,5000, 25000)
   val tasks = Array(/*"ner","pos", "intrinsic",*/"sentiment")
   val models = Array(/*"cbow", "skip", */"self")
   val jsonFilename = "resources/evaluation/analogy/sentence-tr.json"
@@ -196,6 +196,7 @@ object SamplingExperiment {
                 crrParams.epocs = adjustEpoc(selectSize)
                 crrParams.batchSize = 128
                 crrParams.evalBatchSize = 64
+                crrParams.evalWindowSize = 500
                 crrParams.evalEpocs = 7
                 crrParams.embeddingRandomMask = 1
 

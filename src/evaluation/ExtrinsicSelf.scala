@@ -21,6 +21,8 @@ import org.nd4j.linalg.lossfunctions.LossFunctions
 import sampling.experiments.SampleParams
 import utils.Tokenizer
 
+import scala.collection.mutable
+import scala.collection.parallel.CollectionConverters.ArrayIsParallelizable
 import scala.io.Source
 
 abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTrain: Boolean = false) extends SelfAttentionLSTM(params, tokenizer, forceTrain) {
@@ -54,8 +56,8 @@ abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTr
   override def setWords(set: Set[String]): this.type = this
 
   def init(): this.type = {
-    //val lengths = loadSamples(getTraining()).toArray.par.map(pair=> tokenize(pair._1).length)
-    maxWindowLength = 1000
+    /*val lengths = loadSamples(getTraining()).toArray.par.map(pair=> tokenize(pair._1).length)
+    maxWindowLength = lengths.max*/
     this
   }
 
@@ -109,36 +111,46 @@ abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTr
   override def iterator(filename: String): MultiDataSetIterator = {
     new MultiDataSetIterator {
       val dataset = loadSamples(filename).toArray
-      var samples = dataset.iterator
+      var lines = dataset.iterator
       val maxSize = dataset.length
       val maxLength = 100;
       val stepSize = maxSize / maxLength
       var crrCount = 0;
+      var stack = mutable.Stack[(String, String)]()
 
       override def next(i: Int): MultiDataSet = {
         var inputStack = Array[INDArray]()
         var outputStack = Array[INDArray]()
+        var inputMaskStack = Array[INDArray]()
+        var outputMaskStack = Array[INDArray]()
         var i = 0;
-        while (i < params.evalBatchSize && samples.hasNext) {
-          val (input, output) = samples.next()
-          val inputArray = retrieve(tokenize(input).take(maxWindowLength))
+        while (i < params.evalBatchSize && lines.hasNext) {
 
+          crrCount+=1
+
+          val (input, output) = lines.next()
+
+          val inputArray = retrieve(tokenize(input).take(maxWindowLength))
+          val inputMask = mask(inputArray.length, maxWindowLength)
           val inputIndex = index(inputArray, maxWindowLength)
           val outputArray = onehot(labels().indexOf(output), labels.length)
-
+          val outputMask = mask(1, 1)
           inputStack :+= inputIndex
+          inputMaskStack :+= inputMask
           outputStack :+= outputArray
+          outputMaskStack :+= outputMask
           i = i + 1
 
-          crrCount += 1
         }
 
         progress("PROGRESS", maxLength, crrCount / stepSize)
 
-        val vLeft = Nd4j.vstack(inputStack: _*)
-        val vOutput = Nd4j.vstack(outputStack: _*)
+        val stackInput = Nd4j.vstack(inputStack: _*)
+        val stackMaskInput = Nd4j.vstack(inputMaskStack: _*)
+        val stackOutput = Nd4j.vstack(outputStack: _*)
+        val stackMaskOutput = Nd4j.vstack(outputMaskStack: _*)
 
-        new MultiDataSet(Array(vLeft), Array(vOutput))
+        new MultiDataSet(stackInput, stackOutput, stackMaskInput, stackMaskOutput)
       }
 
       override def setPreProcessor(multiDataSetPreProcessor: MultiDataSetPreProcessor): Unit = ???
@@ -150,11 +162,11 @@ abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTr
       override def asyncSupported(): Boolean = true
 
       override def reset(): Unit = {
-        samples = loadSamples(filename)
+        lines = loadSamples(filename)
         crrCount = 0
       }
 
-      override def hasNext: Boolean = samples.hasNext
+      override def hasNext: Boolean = lines.hasNext
 
       override def next(): MultiDataSet = next(0)
     }
@@ -162,7 +174,7 @@ abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTr
 
   def updateWeights(graph: ComputationGraph): ComputationGraph = {
 
-    load()
+
     graph.init()
 
     if (params.evalUseEmbeddings) {
@@ -183,10 +195,12 @@ abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTr
   }
 
   override def model(): ComputationGraph = {
+    load()
+
     val dictionarySize = dictionaryIndex.size
 
     val conf = new NeuralNetConfiguration.Builder()
-      .cudnnAlgoMode(AlgoMode.PREFER_FASTEST)
+      .cudnnAlgoMode(AlgoMode.NO_WORKSPACE)
       .dataType(DataType.FLOAT)
       .activation(Activation.TANH)
       .updater(new Adam(params.evalRate))
@@ -210,7 +224,6 @@ abstract class ExtrinsicSelf(params: SampleParams, tokenizer: Tokenizer, forceTr
       .build()
 
     val graph = new ComputationGraph(conf)
-    graph.init()
     updateWeights(graph)
   }
 

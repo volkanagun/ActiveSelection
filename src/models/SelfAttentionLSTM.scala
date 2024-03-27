@@ -142,6 +142,15 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
     })
   }
 
+  def mask(tokenSize: Int, maxWindowSize:Int): INDArray = {
+    val array = Array.fill[Float](maxWindowSize)(0)
+    for(i<-0 until tokenSize){
+      array(i) = 1f
+    }
+    Nd4j.create(array)
+  }
+
+
   def maskOutput(sentenceVector: Array[INDArray]): Array[INDArray] = {
     sentenceVector.map(_ => {
       val mask = Nd4j.zeros(1, 1)
@@ -222,23 +231,23 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
     val size = Source.fromFile(filename).getLines().size
     val epocs = (if (isEvaluation) params.evalEpocs else params.epocs)
 
-    load()
+    //load()
 
     if (!new File(params.embeddingsFilename()).exists() || isEvaluation) {
       println("Training started...")
-      computationGraph = model()
+      val newGraph = model()
       val statsStorage = new InMemoryStatsStorage()
       val uiServer = UIServer.getInstance()
       uiServer.attach(statsStorage)
 
-      computationGraph.addListeners(new StatsListener(statsStorage, 1))
+      newGraph.addListeners(new StatsListener(statsStorage, 1))
 
       val multiDataSetIterator = iterator(filename)
 
       val start = System.currentTimeMillis()
 
       sampleCount = 0
-      //val wrapper = getWrapper(computationGraph)
+      //val wrapper = getWrapper(newGraph)
 
       while (i < epocs) {
 
@@ -246,7 +255,7 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
         println("Epoc : " + i)
         try {
           //wrapper.fit(multiDataSetIterator)
-          computationGraph.fit(multiDataSetIterator)
+          newGraph.fit(multiDataSetIterator)
           multiDataSetIterator.reset()
           i = i + 1
           sampleCount += size
@@ -264,10 +273,11 @@ class SelfAttentionLSTM(params: SampleParams, tokenizer: Tokenizer, isEvaluation
       avgTime = passedTime / (sampleCount)
 
       println("Saving model...")
-      computationGraph.save(modelFile)
-      if (!isEvaluation) saveEmbeddings(computationGraph)
+      computationGraph = newGraph
+      newGraph.save(modelFile)
+      if (!isEvaluation) saveEmbeddings(newGraph)
 
-      ModelSerializer.writeModel(computationGraph, modelFile, false)
+      ModelSerializer.writeModel(newGraph, modelFile, false)
       uiServer.stop()
 
       System.gc()
